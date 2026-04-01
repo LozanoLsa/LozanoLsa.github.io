@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seeing ML — LozanoLsa</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;0,9..144,900;1,9..144,300;1,9..144,500;1,9..144,800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#060A12;--surface:#0C1220;--surface2:#121A2E;--surface3:#19233A;
+  --blue:#38BEFF;--cyan:#00F5D4;--orange:#FF7A3D;--purple:#A78BFA;
+  --green:#34D399;--gold:#FBBF24;--rose:#FB7185;
+  --text:#D8E0F0;--muted:#5A6A8A;--dim:#2A3A5A;
+  --border:rgba(255,255,255,0.055);--border2:rgba(255,255,255,0.12);
+}
+html{scroll-behavior:smooth;scroll-padding-top:64px}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;opacity:.028;pointer-events:none;z-index:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:200;height:64px;padding:0 2.5rem;
+  display:flex;align-items:center;justify-content:space-between;
+  background:rgba(6,10,18,.85);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);}
+.nav-brand{font-family:'JetBrains Mono',monospace;font-size:.75rem;letter-spacing:.04em;}
+.nav-brand strong{color:var(--blue)}.nav-brand span{color:var(--muted)}
+.nav-gh{display:flex;align-items:center;gap:.5rem;text-decoration:none;
+  font-family:'JetBrains Mono',monospace;font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);border:1px solid var(--border2);padding:.45rem 1rem;transition:all .2s;}
+.nav-gh:hover{color:var(--text);border-color:var(--text)}
+.nav-gh svg{width:14px;height:14px}
+
+/* HERO */
+#hero{position:relative;height:100vh;min-height:620px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+#hero-canvas{position:absolute;inset:0;opacity:.45}
+.hero-inner{position:relative;z-index:2;text-align:center;padding:0 2rem;max-width:780px;}
+.hero-eye{font-family:'JetBrains Mono',monospace;font-size:.65rem;letter-spacing:.3em;text-transform:uppercase;
+  color:var(--orange);margin-bottom:1.6rem;opacity:0;animation:fUp .9s cubic-bezier(.16,1,.3,1) forwards .2s;}
+.hero-title{font-family:'Fraunces',serif;font-size:clamp(3.5rem,10vw,7rem);font-weight:900;line-height:.93;
+  margin-bottom:1.8rem;opacity:0;animation:fUp .9s cubic-bezier(.16,1,.3,1) forwards .4s;}
+.hero-title em{font-style:italic;color:var(--blue)}
+.hero-sub{font-size:1rem;color:var(--muted);line-height:1.8;font-weight:300;margin-bottom:3rem;
+  opacity:0;animation:fUp .9s cubic-bezier(.16,1,.3,1) forwards .6s;}
+.hero-btns{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;
+  opacity:0;animation:fUp .9s cubic-bezier(.16,1,.3,1) forwards .8s;}
+.btn-hero-p{padding:.85rem 2.2rem;background:var(--blue);color:var(--bg);border:none;
+  font-family:'DM Sans',sans-serif;font-size:.78rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;text-decoration:none;transition:background .2s;}
+.btn-hero-p:hover{background:var(--cyan)}
+.btn-hero-s{padding:.85rem 2.2rem;background:transparent;color:var(--muted);border:1px solid var(--border2);
+  font-family:'DM Sans',sans-serif;font-size:.78rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;text-decoration:none;transition:all .2s;}
+.btn-hero-s:hover{color:var(--text);border-color:var(--text)}
+.scroll-hint{position:absolute;bottom:2.2rem;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:.5rem;opacity:0;animation:fIn 1s ease forwards 1.5s;}
+.scroll-line{width:1px;height:40px;background:linear-gradient(to bottom,var(--blue),transparent);animation:pulse 2s ease-in-out infinite;}
+.scroll-hint span{font-family:'JetBrains Mono',monospace;font-size:.58rem;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);}
+@keyframes fUp{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fIn{from{opacity:0}to{opacity:1}}
+@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+
+/* LAYOUT */
+.container{max-width:1120px;margin:0 auto;padding:0 2.5rem}
+.label-tag{font-family:'JetBrains Mono',monospace;font-size:.63rem;letter-spacing:.25em;text-transform:uppercase;color:var(--orange);}
+.sec-title{font-family:'Fraunces',serif;font-size:clamp(1.8rem,3.5vw,2.6rem);font-weight:700;line-height:1.1;}
+.rule{width:32px;height:2px;background:var(--orange);margin:1.2rem 0;}
+
+/* BLOCK HEADERS */
+.block-wrap{padding:5.5rem 0 0;}
+.block-wrap.alt{background:var(--surface)}
+.block-hd{display:flex;flex-direction:column;margin-bottom:3.5rem;}
+.block-hd .label-tag{margin-bottom:.6rem}
+
+/* CARDS GRID */
+.cards-grid{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--border);}
+.mcard{padding:2.4rem;border-right:1px solid var(--border);position:relative;overflow:hidden;transition:background .2s;cursor:default;--ca:var(--blue);}
+.mcard:last-child{border-right:none}
+.mcard:hover{background:var(--surface2)}
+.mcard::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--ca);transform:scaleX(0);transform-origin:left;transition:transform .35s;}
+.mcard:hover::after{transform:scaleX(1)}
+.mcard.c1{--ca:var(--blue)}.mcard.c2{--ca:var(--cyan)}.mcard.c3{--ca:var(--green)}
+.mcard.c4{--ca:var(--rose)}.mcard.c5{--ca:var(--gold)}.mcard.c6{--ca:var(--purple)}
+.mc-num{font-family:'Fraunces',serif;font-size:3.5rem;font-weight:900;font-style:italic;
+  color:var(--ca);opacity:.08;line-height:1;margin-bottom:1.4rem;transition:opacity .2s;}
+.mcard:hover .mc-num{opacity:.2}
+.mc-tag{font-family:'JetBrains Mono',monospace;font-size:.58rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ca);margin-bottom:.45rem;opacity:.7;}
+.mc-name{font-family:'Fraunces',serif;font-size:1.2rem;font-weight:700;margin-bottom:.65rem;}
+.mc-desc{font-size:.8rem;color:var(--muted);line-height:1.75;font-weight:300;margin-bottom:1.4rem;}
+.mc-pills{display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:1.2rem;}
+.mc-pill{font-family:'JetBrains Mono',monospace;font-size:.56rem;padding:.18rem .55rem;border:1px solid var(--ca);color:var(--ca);opacity:.5;letter-spacing:.03em;}
+.mc-when{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:1.4rem;}
+.mc-when-item{padding:.65rem .7rem;background:var(--surface3);}
+.mc-when-label{font-family:'JetBrains Mono',monospace;font-size:.54rem;letter-spacing:.12em;text-transform:uppercase;margin-bottom:.3rem;}
+.mc-when-label.yes{color:var(--green)}.mc-when-label.no{color:var(--rose)}
+.mc-when-text{font-size:.72rem;color:var(--muted);line-height:1.55;}
+.mc-badge{display:inline-flex;align-items:center;gap:.4rem;font-family:'JetBrains Mono',monospace;
+  font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ca);opacity:.7;
+  border-bottom:1px solid var(--ca);padding-bottom:.15rem;}
+
+/* DEMOS */
+.demo-wrap{padding:4.5rem 0;border-top:1px solid var(--border);}
+.demo-wrap.surface{background:var(--surface)}
+.think-box{padding:1.2rem 1.6rem;background:var(--surface3);border-left:3px solid var(--blue);margin-bottom:3rem;}
+.think-box.gold{border-color:var(--gold)}
+.think-box.rose{border-color:var(--rose)}
+.think-label{font-family:'JetBrains Mono',monospace;font-size:.58rem;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:.35rem;}
+.think-text{font-size:.88rem;color:var(--text);line-height:1.65;font-style:italic;}
+.demo-layout{display:grid;grid-template-columns:1fr 1fr;gap:4rem;align-items:start;}
+.demo-layout.rev{direction:rtl}.demo-layout.rev>*{direction:ltr}
+.demo-ref{font-family:'JetBrains Mono',monospace;font-size:.6rem;letter-spacing:.15em;text-transform:uppercase;color:var(--dim);margin-bottom:.4rem;}
+.demo-title{font-family:'Fraunces',serif;font-size:clamp(1.4rem,2.8vw,2rem);font-weight:700;line-height:1.15;margin-bottom:.8rem;}
+.demo-desc{font-size:.84rem;color:var(--muted);line-height:1.85;font-weight:300;margin-bottom:2rem;}
+.demo-desc em{color:var(--blue);font-style:normal;font-weight:500}
+.demo-desc em.gold{color:var(--gold)}.demo-desc em.rose{color:var(--rose)}
+
+/* Controls */
+.controls{display:flex;flex-direction:column;gap:1.2rem}
+.ctrl-row{display:flex;gap:.5rem;flex-wrap:wrap}
+.btn-toggle{padding:.55rem 1.2rem;background:transparent;border:1px solid var(--border2);color:var(--muted);
+  font-family:'JetBrains Mono',monospace;font-size:.62rem;letter-spacing:.08em;cursor:pointer;transition:all .2s;}
+.btn-toggle:hover{color:var(--text);border-color:var(--text)}
+.btn-toggle.active{background:var(--blue);color:var(--bg);border-color:var(--blue)}
+.btn-toggle.active.gold{background:var(--gold);border-color:var(--gold)}
+.btn-toggle.active.rose{background:var(--rose);border-color:var(--rose)}
+.ctrl-group{display:flex;flex-direction:column;gap:.5rem}
+.ctrl-label{font-family:'JetBrains Mono',monospace;font-size:.65rem;color:var(--muted);letter-spacing:.05em;display:flex;justify-content:space-between;}
+.ctrl-label span{color:var(--text);font-weight:500;background:var(--surface3);padding:.12rem .45rem;font-size:.72rem;}
+input[type=range]{-webkit-appearance:none;width:100%;height:2px;background:var(--surface3);outline:none;cursor:pointer;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--blue);cursor:pointer;transition:transform .15s;}
+input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.5)}
+.btn{padding:.55rem 1.3rem;font-family:'DM Sans',sans-serif;font-size:.72rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;border:none;cursor:pointer;transition:all .2s;}
+.btn.p{background:var(--blue);color:var(--bg)}.btn.p:hover{background:var(--cyan)}
+.btn.pg{background:var(--gold);color:var(--bg)}.btn.pg:hover{filter:brightness(1.1)}
+.btn.pr{background:var(--rose);color:var(--bg)}.btn.pr:hover{filter:brightness(1.1)}
+.btn.g{background:transparent;border:1px solid var(--border2);color:var(--muted)}.btn.g:hover{color:var(--text);border-color:var(--text)}
+
+/* Viz box */
+.viz-box{background:var(--surface);border:1px solid var(--border);position:relative;overflow:hidden;}
+.viz-box svg{display:block;width:100%}
+.viz-tag{position:absolute;top:.8rem;right:.85rem;font-family:'JetBrains Mono',monospace;font-size:.56rem;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;}
+.viz-stats{display:flex;border-top:1px solid var(--border);background:var(--surface2);}
+.vstat{flex:1;padding:.8rem 1rem;border-right:1px solid var(--border);}
+.vstat:last-child{border-right:none}
+.vstat-l{font-family:'JetBrains Mono',monospace;font-size:.54rem;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;margin-bottom:.25rem;}
+.vstat-v{font-family:'JetBrains Mono',monospace;font-size:.88rem;font-weight:500;}
+
+/* Math collapse */
+.math-wrap{margin-top:2rem;}
+.math-btn{display:flex;align-items:center;justify-content:space-between;width:100%;
+  background:var(--surface3);border:none;border-left:2px solid var(--purple);padding:.75rem 1rem;
+  cursor:pointer;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;transition:color .2s;}
+.math-btn:hover{color:var(--text)}
+.math-btn .arrow{transition:transform .25s}
+.math-open .math-btn .arrow{transform:rotate(180deg)}
+.math-body{display:none;padding:1.2rem;background:var(--surface3);border-left:2px solid var(--purple);border-top:none;}
+.math-open .math-body{display:block}
+.math-formula{font-family:'JetBrains Mono',monospace;font-size:.72rem;color:var(--purple);line-height:2;white-space:pre;}
+
+/* MANIFESTO */
+#manifesto{padding:7rem 0;background:var(--surface);border-top:1px solid var(--border);}
+.mani-grid{display:grid;grid-template-columns:1fr 1fr;gap:6rem;align-items:start;}
+.mani-left .big-q{font-family:'Fraunces',serif;font-size:clamp(2rem,4vw,3.2rem);font-weight:300;
+  font-style:italic;line-height:1.25;color:var(--dim);}
+.mani-left .big-q strong{color:var(--text);font-style:normal;font-weight:700}
+.mani-left .big-q em{color:var(--orange)}
+.mani-blocks{display:flex;flex-direction:column;gap:2rem;}
+.mani-block{padding-left:1.2rem;border-left:1px solid var(--border2);}
+.mani-block p{font-size:.88rem;color:var(--muted);line-height:1.9;font-weight:300;}
+.mani-block p strong{color:var(--text);font-weight:600}
+.mani-block p em{color:var(--blue);font-style:normal}
+.mani-links{display:flex;gap:1rem;flex-wrap:wrap;margin-top:3rem;}
+.mani-link{display:flex;align-items:center;gap:.5rem;text-decoration:none;padding:.6rem 1.2rem;
+  border:1px solid var(--border2);color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:.65rem;letter-spacing:.08em;text-transform:uppercase;transition:all .2s;}
+.mani-link:hover{color:var(--text);border-color:var(--text)}
+.mani-link svg{width:13px;height:13px;flex-shrink:0}
+
+/* FOOTER */
+footer{padding:1.8rem 2.5rem;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;}
+.foot-brand{font-family:'JetBrains Mono',monospace;font-size:.65rem;color:var(--dim);letter-spacing:.06em;}
+.foot-brand strong{color:var(--blue)}
+.foot-gh{display:flex;align-items:center;gap:.5rem;text-decoration:none;color:var(--dim);font-family:'JetBrains Mono',monospace;font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;transition:color .2s;}
+.foot-gh:hover{color:var(--muted)}
+
+/* Responsive */
+@media(max-width:900px){
+  .cards-grid{grid-template-columns:1fr 1fr}
+  .mcard:last-child{border-right:1px solid var(--border);border-bottom:none}
+  .mcard:nth-child(2n){border-right:none}
+  .demo-layout,.demo-layout.rev{grid-template-columns:1fr;direction:ltr;gap:2.5rem}
+  .mani-grid{grid-template-columns:1fr;gap:3rem}
+}
+@media(max-width:600px){
+  .cards-grid{grid-template-columns:1fr}
+  .mcard{border-right:none;border-bottom:1px solid var(--border)}
+  nav{padding:0 1.2rem}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-brand">
+    <strong>LozanoLsa</strong> <span>· Turning Operations into Predictive Systems</span>
+  </div>
+  <a href="https://github.com/LozanoLsa" target="_blank" rel="noopener" class="nav-gh">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.745 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+    GitHub
+  </a>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <canvas id="hero-canvas"></canvas>
+  <div class="hero-inner">
+    <div class="hero-eye">An interactive visual introduction to ML</div>
+    <h1 class="hero-title">Seeing <em>ML</em></h1>
+    <p class="hero-sub">Understand Machine Learning through interactive visualizations.<br>Geometry, intuition, and math. No empty formulas.</p>
+    <div class="hero-btns">
+      <a href="#block1" class="btn-hero-p">Explore the models</a>
+      <a href="https://github.com/LozanoLsa" target="_blank" rel="noopener" class="btn-hero-s">View on GitHub</a>
+    </div>
+  </div>
+  <div class="scroll-hint"><div class="scroll-line"></div><span>scroll</span></div>
+</section>
+
+<!-- DEMO 0: The Sigmoid — building block -->
+<section class="demo-wrap surface" id="demo0" style="padding-top:5rem">
+  <div class="container">
+    <div style="text-align:center;margin-bottom:3rem">
+      <div class="label-tag" style="margin-bottom:.7rem">Before we compare the models</div>
+      <h2 class="sec-title" style="max-width:560px;margin:0 auto">Understand the building block first</h2>
+    </div>
+    <div class="think-box" style="border-color:var(--cyan)">
+      <div class="think-label">Think of it like...</div>
+      <div class="think-text">A volume knob that only goes from 0 to 1. No matter how extreme the input signal is — very negative or very positive — the output always stays between 0 (definitely not) and 1 (definitely yes). That's the sigmoid.</div>
+    </div>
+    <div class="demo-layout">
+      <div>
+        <div class="viz-box" id="d0-box">
+          <div class="viz-tag">σ(z) = 1 / (1 + e⁻ᶻ)</div>
+          <div id="d0-host"></div>
+          <div class="viz-stats">
+            <div class="vstat"><div class="vstat-l">z = w·x + b</div><div class="vstat-v" id="d0-z">0.00</div></div>
+            <div class="vstat"><div class="vstat-l">σ(z) = P(y=1)</div><div class="vstat-v" id="d0-sig" style="color:var(--cyan)">0.500</div></div>
+            <div class="vstat"><div class="vstat-l">Decision</div><div class="vstat-v" id="d0-dec" style="font-size:.72rem;color:var(--muted)">Uncertain</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="demo-info">
+        <div class="demo-ref">Demo 00 — Logistic Regression</div>
+        <h3 class="demo-title">From a Line<br>to a Probability</h3>
+        <div class="rule" style="background:var(--cyan)"></div>
+        <p class="demo-desc">A linear model produces <em style="color:var(--cyan)">z = w·x + b</em> — any number from −∞ to +∞. That's useless as a probability. The sigmoid <em style="color:var(--cyan)">squashes</em> it into [0, 1]. Drag the slider to move your input point. Watch how the curve compresses extreme values toward 0 and 1 — and how the decision flips when σ(z) crosses <em style="color:var(--cyan)">0.5</em>.</p>
+        <div class="controls">
+          <div class="ctrl-group">
+            <div class="ctrl-label">Input z (linear score) <span id="d0-z-label">0.0</span></div>
+            <input type="range" id="d0-slider" min="-60" max="60" value="0" style="accent-color:var(--cyan)">
+          </div>
+          <div class="ctrl-group">
+            <div class="ctrl-label">Decision threshold <span id="d0-thresh-label">0.50</span></div>
+            <input type="range" id="d0-thresh" min="10" max="90" value="50" style="accent-color:var(--orange)">
+          </div>
+        </div>
+        <div class="math-wrap">
+          <div class="math-btn" onclick="this.parentElement.classList.toggle('math-open')">
+            <span>The math behind it</span><span class="arrow">↓</span>
+          </div>
+          <div class="math-body">
+            <pre class="math-formula" style="color:var(--cyan)">Sigmoid:    σ(z) = 1 / (1 + e^-z)
+
+Properties: σ(0)   = 0.5   (uncertain)
+            σ(+∞)  → 1.0   (class 1)
+            σ(-∞)  → 0.0   (class 0)
+            σ'(z)  = σ(z)·(1 - σ(z))  ← used in backprop
+
+Decision:   ŷ = 1  if σ(z) ≥ threshold
+            ŷ = 0  otherwise</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BLOCK 1: Logistic · Naive Bayes · KNN -->
+<section class="block-wrap" id="block1">
+  <div class="container">
+    <div class="block-hd">
+      <div class="label-tag">Block 01 — Supervised Classification</div>
+      <h2 class="sec-title">Linear &amp; Probabilistic Models</h2>
+      <div class="rule"></div>
+    </div>
+    <div class="cards-grid">
+
+      <div class="mcard c1">
+        <div class="mc-num">01</div>
+        <div class="mc-tag">Cap. 01</div>
+        <div class="mc-name">Logistic Regression</div>
+        <div class="mc-desc">Applies a sigmoid function to a linear combination of features to estimate class probabilities. The decision boundary is a hyperplane — a straight line in 2D. Simple, fast, and interpretable.</div>
+        <div class="mc-pills"><span class="mc-pill">Supervised</span><span class="mc-pill">Classifier</span><span class="mc-pill">Parametric</span><span class="mc-pill">Linear</span><span class="mc-pill">Probabilistic</span></div>
+        <div class="mc-when">
+          <div class="mc-when-item"><div class="mc-when-label yes">✓ Use when</div><div class="mc-when-text">Classes are linearly separable. You need probability estimates. Starting baseline.</div></div>
+          <div class="mc-when-item"><div class="mc-when-label no">✗ Avoid when</div><div class="mc-when-text">Boundary is non-linear. Features are highly correlated.</div></div>
+        </div>
+        <div class="mc-badge">→ Demo 01</div>
+      </div>
+
+      <div class="mcard c2">
+        <div class="mc-num">02</div>
+        <div class="mc-tag">Cap. 02</div>
+        <div class="mc-name">Naive Bayes</div>
+        <div class="mc-desc">Uses Bayes' theorem assuming features are conditionally independent given the class. Computes Gaussian likelihoods per class and picks the most probable one. Surprisingly powerful for its simplicity.</div>
+        <div class="mc-pills"><span class="mc-pill">Supervised</span><span class="mc-pill">Classifier</span><span class="mc-pill">Probabilistic</span><span class="mc-pill">Generative</span><span class="mc-pill">Fast</span></div>
+        <div class="mc-when">
+          <div class="mc-when-item"><div class="mc-when-label yes">✓ Use when</div><div class="mc-when-text">Small datasets. Real-time predictions. Text classification.</div></div>
+          <div class="mc-when-item"><div class="mc-when-label no">✗ Avoid when</div><div class="mc-when-text">Features are correlated. Independence assumption is clearly wrong.</div></div>
+        </div>
+        <div class="mc-badge">→ Demo 01</div>
+      </div>
+
+      <div class="mcard c3">
+        <div class="mc-num">03</div>
+        <div class="mc-tag">Cap. 03</div>
+        <div class="mc-name">K-Nearest Neighbors</div>
+        <div class="mc-desc">Stores all training points and classifies by majority vote among the K closest neighbors. No training phase — the model IS the data. Boundary adapts entirely to local density.</div>
+        <div class="mc-pills"><span class="mc-pill">Supervised</span><span class="mc-pill">Classifier</span><span class="mc-pill">Non-parametric</span><span class="mc-pill">Instance-based</span><span class="mc-pill">Lazy</span></div>
+        <div class="mc-when">
+          <div class="mc-when-item"><div class="mc-when-label yes">✓ Use when</div><div class="mc-when-text">Non-linear boundaries. Small/medium datasets. Low-dimensional data.</div></div>
+          <div class="mc-when-item"><div class="mc-when-label no">✗ Avoid when</div><div class="mc-when-text">Large datasets (slow predictions). High-dimensional data (curse of dimensionality).</div></div>
+        </div>
+        <div class="mc-badge">→ Demo 01</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- DEMO 1: How Classifiers Draw Boundaries -->
+<section class="demo-wrap" id="demo1">
+  <div class="container">
+    <div class="think-box">
+      <div class="think-label">Think of it like...</div>
+      <div class="think-text">Three different artists drawing the border between two countries — each follows a different rule, but they're all looking at the same map.</div>
+    </div>
+    <div class="demo-layout">
+      <div>
+        <div class="viz-box" id="d1-box">
+          <div class="viz-tag" id="d1-tag">Logistic Regression</div>
+          <div id="d1-host"></div>
+          <div class="viz-stats">
+            <div class="vstat"><div class="vstat-l">Model</div><div class="vstat-v" id="d1-model" style="font-size:.75rem">Logistic</div></div>
+            <div class="vstat"><div class="vstat-l">Accuracy</div><div class="vstat-v" id="d1-acc">—</div></div>
+            <div class="vstat"><div class="vstat-l">Boundary</div><div class="vstat-v" id="d1-bound" style="font-size:.72rem">Linear</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="demo-info">
+        <div class="demo-ref">Demo 01 — Supervised Classification</div>
+        <h3 class="demo-title">How Classifiers Draw Boundaries</h3>
+        <div class="rule"></div>
+        <p class="demo-desc">Switch between models and watch how the decision boundary changes over the <em>same dataset</em>. Logistic draws a straight line. Naive Bayes draws elliptical contours. KNN bends to fit every cluster — adjust <em>K</em> to control how smooth or jagged it gets.</p>
+        <div class="controls">
+          <div class="ctrl-row" id="d1-toggles">
+            <button class="btn-toggle active" data-model="logistic">Logistic</button>
+            <button class="btn-toggle" data-model="naivebayes">Naive Bayes</button>
+            <button class="btn-toggle" data-model="knn">KNN</button>
+          </div>
+          <div class="ctrl-group" id="k-group" style="display:none">
+            <div class="ctrl-label">K neighbors <span id="k-val">5</span></div>
+            <input type="range" id="k-slider" min="1" max="15" step="2" value="5">
+          </div>
+          <div class="ctrl-row">
+            <button class="btn g" id="d1-regen">↺ New Data</button>
+          </div>
+        </div>
+        <div class="math-wrap">
+          <div class="math-btn" onclick="this.parentElement.classList.toggle('math-open')">
+            <span>The math behind it</span><span class="arrow">↓</span>
+          </div>
+          <div class="math-body">
+            <pre class="math-formula">Logistic:   σ(w·x + b) = P(y=1|x)
+            where σ(z) = 1 / (1 + e^-z)
+
+Naive Bayes: P(C|x) ∝ P(C) · ∏ᵢ P(xᵢ|C)
+             P(xᵢ|C) ~ N(μᵢ꜀, σᵢ꜀²)
+
+KNN:         ŷ = mode { yᵢ : i ∈ KNN(x, K) }
+             distance = √(Σ (xᵢ-xⱼ)²)</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DEMO 1b: Naive Bayes — Why the Gaussians -->
+<section class="demo-wrap" id="demo1b">
+  <div class="container">
+    <div class="think-box" style="border-color:var(--cyan)">
+      <div class="think-label">Think of it like...</div>
+      <div class="think-text">Each class leaves a fingerprint on every feature — a bell curve showing where that class typically lives. When you see a new point, you check: which class's fingerprint fits it better? The one with the taller bell at that spot wins.</div>
+    </div>
+    <div class="demo-layout rev">
+      <div>
+        <div class="viz-box" id="dnb-box">
+          <div class="viz-tag" id="dnb-tag">Gaussian Likelihood — Feature 1</div>
+          <div id="dnb-host"></div>
+          <div class="viz-stats">
+            <div class="vstat"><div class="vstat-l">x value</div><div class="vstat-v" id="dnb-x">0.00</div></div>
+            <div class="vstat"><div class="vstat-l">P(C0 | x)</div><div class="vstat-v" id="dnb-p0" style="color:var(--blue)">—</div></div>
+            <div class="vstat"><div class="vstat-l">P(C1 | x)</div><div class="vstat-v" id="dnb-p1" style="color:var(--orange)">—</div></div>
+            <div class="vstat"><div class="vstat-l">Predicted</div><div class="vstat-v" id="dnb-pred" style="font-size:.7rem">—</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="demo-info">
+        <div class="demo-ref">Demo 01b — Naive Bayes</div>
+        <h3 class="demo-title">Why the<br>Gaussians?</h3>
+        <div class="rule" style="background:var(--cyan)"></div>
+        <p class="demo-desc">Naive Bayes fits a <em style="color:var(--cyan)">Gaussian (bell curve)</em> to each feature for each class. The <em style="color:var(--blue)">blue bell</em> is Class 0, the <em style="color:var(--orange)">orange bell</em> is Class 1. Drag the slider to move your test point — the bars show the posterior probability for each class in real time. The overlap zone is where the model is uncertain.</p>
+        <div class="controls">
+          <div class="ctrl-group">
+            <div class="ctrl-label">Test point x <span id="dnb-slider-label">0.0</span></div>
+            <input type="range" id="dnb-slider" min="-100" max="100" value="0" style="accent-color:var(--cyan)">
+          </div>
+          <div class="ctrl-row">
+            <button class="btn-toggle active" data-dnb="f1" id="dnb-f1-btn" style="border-color:var(--cyan);color:var(--cyan)" onclick="dnbSwitchFeature(1)">Feature 1</button>
+            <button class="btn-toggle" data-dnb="f2" id="dnb-f2-btn" style="" onclick="dnbSwitchFeature(2)">Feature 2</button>
+            <button class="btn g" id="dnb-regen" onclick="dnbRegen()">↺ New Dataset</button>
+          </div>
+        </div>
+        <!-- Probability bars -->
+        <div style="margin-top:1.5rem;display:flex;flex-direction:column;gap:.6rem">
+          <div>
+            <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--blue);margin-bottom:.3rem">
+              <span>Class 0</span><span id="dnb-bar0-pct">50%</span>
+            </div>
+            <div style="height:6px;background:var(--surface3);width:100%">
+              <div id="dnb-bar0" style="height:100%;background:var(--blue);width:50%;transition:width .15s"></div>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--orange);margin-bottom:.3rem">
+              <span>Class 1</span><span id="dnb-bar1-pct">50%</span>
+            </div>
+            <div style="height:6px;background:var(--surface3);width:100%">
+              <div id="dnb-bar1" style="height:100%;background:var(--orange);width:50%;transition:width .15s"></div>
+            </div>
+          </div>
+        </div>
+        <div class="math-wrap">
+          <div class="math-btn" onclick="this.parentElement.classList.toggle('math-open')">
+            <span>The math behind it</span><span class="arrow">↓</span>
+          </div>
+          <div class="math-body">
+            <pre class="math-formula" style="color:var(--cyan)">Gaussian likelihood:
+  P(x | C) = (1/√2πσ²) · exp(-(x-μ)²/2σ²)
+
+Posterior (Bayes rule):
+  P(C | x) ∝ P(C) · P(x | C)
+
+"Naive" assumption:
+  P(x₁,x₂,...,xₙ | C) = ∏ᵢ P(xᵢ | C)
+  ← features are independent given the class
+
+Decision:
+  ŷ = argmax_C  log P(C) + Σᵢ log P(xᵢ|C)</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BLOCK 2: SVM · Decision Tree · Random Forest -->
+<section class="block-wrap alt" id="block2">
+  <div class="container">
+    <div class="block-hd">
+      <div class="label-tag">Block 02 — Supervised Classification</div>
+      <h2 class="sec-title">Kernel &amp; Tree-Based Models</h2>
+      <div class="rule" style="background:var(--gold)"></div>
+    </div>
+    <div class="cards-grid">
+
+      <div class="mcard c4">
+        <div class="mc-num">04</div>
+        <div class="mc-tag">Cap. 04</div>
+        <div class="mc-name">Support Vector Machine</div>
+        <div class="mc-desc">Finds the hyperplane that maximizes the margin between classes. Only the "support vectors" — the closest points to the boundary — define the model. Kernel functions allow non-linear separation by lifting data to higher dimensions.</div>
+        <div class="mc-pills"><span class="mc-pill">Supervised</span><span class="mc-pill">Classifier</span><span class="mc-pill">Max-Margin</span><span class="mc-pill">Kernel</span><span class="mc-pill">High-dimensional</span></div>
+        <div class="mc-when">
+          <div class="mc-when-item"><div class="mc-when-label yes">✓ Use when</div><div class="mc-when-text">High-dimensional data. Clear margin between classes. Small-medium datasets.</div></div>
+          <div class="mc-when-item"><div class="mc-when-label no">✗ Avoid when</div><div class="mc-when-text">Very large datasets. Need probability outputs. Noisy data with heavy overlap.</div></div>
+        </div>
+        <div class="mc-badge" style="color:var(--rose)">→ Demo 03</div>
+      </div>
+
+      <div class="mcard c5">
+        <div class="mc-num">05</div>
+        <div class="mc-tag">Cap. 05</div>
+        <div class="mc-name">Decision Tree</div>
+        <div class="mc-desc">Recursively splits the feature space with axis-aligned cuts, choosing each split to minimize Gini impurity. The result is a set of human-readable if/then rules. You can trace every single prediction.</div>
+        <div class="mc-pills"><span class="mc-pill">Supervised</span><span class="mc-pill">Classifier</span><span class="mc-pill">Interpretable</span><span class="mc-pill">Rule-based</span><span class="mc-pill">Non-parametric</span></div>
+        <div class="mc-when">
+          <div class="mc-when-item"><div class="mc-when-label yes">✓ Use when</div><div class="mc-when-text">Rules matter. Mixed data types. Explainability is required by stakeholders.</div></div>
+          <div class="mc-when-item"><div class="mc-when-label no">✗ Avoid when</div><div class="mc-when-text">Data is noisy. You need stable predictions. Prone to overfitting.</div></div>
+        </div>
+        <div class="mc-badge" style="color:var(--gold)">→ Demo 02</div>
+      </div>
+
+      <div class="mcard c6">
+        <div class="mc-num">06</div>
+        <div class="mc-tag">Cap. 06</div>
+        <div class="mc-name">Random Forest</div>
+        <div class="mc-desc">Builds many decision trees on bootstrap samples using random feature subsets. Each tree votes, majority wins. The variance drops dramatically compared to a single tree — without significantly increasing bias.</div>
+        <div class="mc-pills"><span class="mc-pill">Supervised</span><span class="mc-pill">Classifier</span><span class="mc-pill">Ensemble</span><span class="mc-pill">Bagging</span><span class="mc-pill">Robust</span></div>
+        <div class="mc-when">
+          <div class="mc-when-item"><div class="mc-when-label yes">✓ Use when</div><div class="mc-when-text">Accuracy is the priority. Noisy data. Large feature sets. Robust baseline.</div></div>
+          <div class="mc-when-item"><div class="mc-when-label no">✗ Avoid when</div><div class="mc-when-text">Need fast real-time predictions. Full interpretability is required.</div></div>
+        </div>
+        <div class="mc-badge" style="color:var(--gold)">→ Demo 02</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- DEMO 2: The Tree That Learns to Split -->
+<section class="demo-wrap surface" id="demo2">
+  <div class="container">
+    <div class="think-box gold">
+      <div class="think-label">Think of it like...</div>
+      <div class="think-text">A game of 20 questions — the computer learns which yes/no question cuts the most confusion in half at each step. Then it invites a hundred friends to play, and takes the majority answer.</div>
+    </div>
+    <div class="demo-layout rev">
+      <div>
+        <div class="viz-box" id="d2-box">
+          <div class="viz-tag" id="d2-tag">Decision Tree</div>
+          <div id="d2-host"></div>
+          <div class="viz-stats">
+            <div class="vstat"><div class="vstat-l">Depth</div><div class="vstat-v" id="d2-depth">0</div></div>
+            <div class="vstat"><div class="vstat-l">Leaves</div><div class="vstat-v" id="d2-leaves">1</div></div>
+            <div class="vstat"><div class="vstat-l">Gini</div><div class="vstat-v" id="d2-gini">—</div></div>
+            <div class="vstat"><div class="vstat-l">Mode</div><div class="vstat-v" id="d2-mode" style="font-size:.7rem">Tree</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="demo-info">
+        <div class="demo-ref">Demo 02 — Tree-Based Models</div>
+        <h3 class="demo-title">The Tree That Learns to Split</h3>
+        <div class="rule" style="background:var(--gold)"></div>
+        <p class="demo-desc">Watch the decision tree <em class="gold">grow one level at a time</em>. Each split is chosen to minimize <em class="gold">Gini impurity</em> — a measure of how mixed the classes are. Then toggle to <em class="gold">Random Forest</em> and see how combining many trees smooths the boundary and reduces overfitting.</p>
+        <div class="controls">
+          <div class="ctrl-row">
+            <button class="btn-toggle active gold" data-d2="tree" id="d2-tree-btn">Decision Tree</button>
+            <button class="btn-toggle gold" data-d2="forest" id="d2-rf-btn">Random Forest</button>
+          </div>
+          <div id="d2-tree-ctrls">
+            <div class="ctrl-group" style="margin-top:.8rem">
+              <div class="ctrl-label">Max depth <span id="d2-depth-val">1</span></div>
+              <input type="range" id="d2-depth-slider" min="0" max="5" value="1">
+            </div>
+          </div>
+          <div class="ctrl-row">
+            <button class="btn pg" id="d2-step">+ Grow one level</button>
+            <button class="btn g" id="d2-reset">Reset</button>
+          </div>
+        </div>
+        <div class="math-wrap">
+          <div class="math-btn" onclick="this.parentElement.classList.toggle('math-open')">
+            <span>The math behind it</span><span class="arrow">↓</span>
+          </div>
+          <div class="math-body">
+            <pre class="math-formula" style="color:var(--gold)">Gini impurity:  G = 1 - Σ pₖ²
+                (0 = pure, 0.5 = maximally mixed)
+
+Best split:     argmin  n_L·G_L + n_R·G_R
+               (f,t)     ————————————————
+                               n
+
+Bootstrap:     sample n points WITH replacement
+               → each tree sees ~63% of data
+
+Aggregation:   ŷ = mode { ŷ_tree₁, ŷ_tree₂, ... }</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DEMO 3: The Margin That Separates Everything -->
+<section class="demo-wrap" id="demo3">
+  <div class="container">
+    <div class="think-box rose">
+      <div class="think-label">Think of it like...</div>
+      <div class="think-text">Finding the widest road that separates two neighborhoods — not just any dividing line, but the one with the most breathing room on both sides. The houses right on the edge of that road are the support vectors.</div>
+    </div>
+    <div class="demo-layout">
+      <div>
+        <div class="viz-box" id="d3-box">
+          <div class="viz-tag" id="d3-tag">SVM — Linear</div>
+          <div id="d3-host"></div>
+          <div class="viz-stats">
+            <div class="vstat"><div class="vstat-l">Kernel</div><div class="vstat-v" id="d3-kernel" style="font-size:.75rem">Linear</div></div>
+            <div class="vstat"><div class="vstat-l">Support Vecs</div><div class="vstat-v" id="d3-sv">—</div></div>
+            <div class="vstat"><div class="vstat-l">C (slack)</div><div class="vstat-v" id="d3-c-val">1.0</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="demo-info">
+        <div class="demo-ref">Demo 03 — Support Vector Machine</div>
+        <h3 class="demo-title">The Margin That Separates Everything</h3>
+        <div class="rule" style="background:var(--rose)"></div>
+        <p class="demo-desc">The <em class="rose">support vectors</em> (highlighted points) are the only ones that define the boundary — remove any other point and nothing changes. The <em class="rose">C parameter</em> controls the tradeoff: low C allows some misclassifications to keep the margin wide; high C forces strict separation. Toggle to <em class="rose">RBF kernel</em> to see how SVM handles data that no straight line can separate.</p>
+        <div class="controls">
+          <div class="ctrl-row">
+            <button class="btn-toggle active rose" data-d3="linear" id="d3-lin-btn">Linear</button>
+            <button class="btn-toggle rose" data-d3="rbf" id="d3-rbf-btn">RBF Kernel</button>
+          </div>
+          <div class="ctrl-group" id="d3-c-group" style="margin-top:.8rem">
+            <div class="ctrl-label">Regularization C <span id="d3-c-disp">1.0</span></div>
+            <input type="range" id="d3-c-slider" min="1" max="100" value="10">
+          </div>
+          <div class="ctrl-row">
+            <button class="btn pr" id="d3-regen">↺ New Data</button>
+          </div>
+        </div>
+        <div class="math-wrap">
+          <div class="math-btn" onclick="this.parentElement.classList.toggle('math-open')">
+            <span>The math behind it</span><span class="arrow">↓</span>
+          </div>
+          <div class="math-body">
+            <pre class="math-formula" style="color:var(--rose)">Objective:  min  ½||w||² + C·Σ max(0, 1-yᵢ(w·xᵢ+b))
+
+Margin:     M = 2/||w||   ← maximize this
+
+Support vectors: points where yᵢ(w·xᵢ+b) = 1
+
+RBF kernel: K(x,x') = exp(-γ‖x-x'‖²)
+            maps data to infinite-dim. space
+            curved boundaries in original space</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MANIFESTO -->
+<section id="manifesto">
+  <div class="container">
+    <div class="mani-grid">
+      <div class="mani-left">
+        <div class="big-q">
+          <strong>Not an oracle.</strong><br>
+          Not a black box.<br>
+          Just <em>code, statistics,</em><br>
+          and the right questions.
+        </div>
+      </div>
+      <div>
+        <div class="label-tag" style="margin-bottom:1rem">About this project</div>
+        <div class="mani-blocks">
+          <div class="mani-block">
+            <p>Everyone is talking about AI. Most treat it like an oracle. Here's what it actually is: <strong>Code. Statistics. Data.</strong> Things we've had for decades — we just weren't asking the right questions.</p>
+          </div>
+          <div class="mani-block">
+            <p>I've spent <strong>16 years in Continuous Improvement</strong> — Lean, Six Sigma, operations on the floor. Plants full of data. Machines sending signals. People making reactive decisions. So I decided to <em>build the bridge.</em></p>
+          </div>
+          <div class="mani-block">
+            <p><strong>Projects. Real use cases. Open code.</strong> Not a course. Not a pitch. Just the honest path — including the mistakes — so others can go further without hitting the same walls.</p>
+          </div>
+          <div class="mani-block">
+            <p>If you work in operations, maintenance, quality, or CI — let's connect, collaborate, and learn together. More projects are on the way.</p>
+          </div>
+        </div>
+        <div class="mani-links">
+          <a href="https://github.com/LozanoLsa" target="_blank" rel="noopener" class="mani-link">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.745 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+            GitHub
+          </a>
+          <a href="https://www.linkedin.com/in/luis-angel-l-b80a7a51/" target="_blank" rel="noopener" class="mani-link">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+            LinkedIn
+          </a>
+          <a href="mailto:lopezlsa1984@gmail.com" class="mani-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            Email
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="foot-brand"><strong>LozanoLsa</strong> · Turning Operations into Predictive Systems · 2025</div>
+  <a href="https://github.com/LozanoLsa" target="_blank" rel="noopener" class="foot-gh">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.745 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+    github.com/LozanoLsa
+  </a>
+</footer>
+
+<script>
+// ════════════════════════════════════════════
+//  HERO CANVAS
+// ════════════════════════════════════════════
+(()=>{
+  const c=document.getElementById('hero-canvas');
+  const ctx=c.getContext('2d');
+  let W,H,nodes=[];
+  const N=55,MAX=155;
+  const resize=()=>{W=c.width=window.innerWidth;H=c.height=window.innerHeight;};
+  const init=()=>{nodes=Array.from({length:N},()=>({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,r:Math.random()*1.6+.8,phase:Math.random()*Math.PI*2}));};
+  const draw=()=>{
+    ctx.clearRect(0,0,W,H);
+    for(let i=0;i<N;i++){for(let j=i+1;j<N;j++){const dx=nodes[i].x-nodes[j].x,dy=nodes[i].y-nodes[j].y,d=Math.sqrt(dx*dx+dy*dy);if(d<MAX){ctx.beginPath();ctx.strokeStyle=`rgba(56,190,255,${(1-d/MAX)*.28})`;ctx.lineWidth=.5;ctx.moveTo(nodes[i].x,nodes[i].y);ctx.lineTo(nodes[j].x,nodes[j].y);ctx.stroke();}}}
+    for(const n of nodes){n.x+=n.vx;n.y+=n.vy;n.phase+=.016;if(n.x<0||n.x>W)n.vx*=-1;if(n.y<0||n.y>H)n.vy*=-1;const g=(Math.sin(n.phase)+1)/2;ctx.beginPath();ctx.arc(n.x,n.y,n.r,0,Math.PI*2);ctx.fillStyle=`rgba(56,190,255,${.3+g*.4})`;ctx.fill();}
+    requestAnimationFrame(draw);
+  };
+  window.addEventListener('resize',()=>{resize();init();});
+  resize();init();draw();
+})();
+
+// ════════════════════════════════════════════
+//  SHARED UTILITIES
+// ════════════════════════════════════════════
+const randn=()=>{let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);};
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+// ════════════════════════════════════════════
+//  DEMO 1 — How Classifiers Draw Boundaries
+// ════════════════════════════════════════════
+(()=>{
+  const VW=460,VH=330,m={t:18,r:18,b:40,l:48};
+  const w=VW-m.l-m.r,h=VH-m.t-m.b;
+  const XMIN=-3.2,XMAX=3.2,YMIN=-3.2,YMAX=3.2;
+  const xs=d3.scaleLinear().domain([XMIN,XMAX]).range([0,w]);
+  const ys=d3.scaleLinear().domain([YMIN,YMAX]).range([h,0]);
+  const GX=52,GY=44;
+  const CLASS_COLORS=['#38BEFF','#FF7A3D'];
+  const CLASS_COLORS_DIM=['rgba(56,190,255,0.18)','rgba(255,122,61,0.18)'];
+
+  let trainX=[],trainY=[],currentModel='logistic',kVal=5;
+
+  const svg=d3.select('#d1-host').append('svg').attr('viewBox',`0 0 ${VW} ${VH}`).style('width','100%');
+  const g=svg.append('g').attr('transform',`translate(${m.l},${m.t})`);
+
+  // grid / axes subtle
+  g.append('g').attr('transform',`translate(0,${h})`).call(d3.axisBottom(xs).ticks(6).tickSize(-h))
+    .call(a=>{a.selectAll('line').attr('stroke','rgba(255,255,255,0.03)');a.selectAll('text').attr('fill','#2A3A5A').attr('font-family','JetBrains Mono').attr('font-size','8px');a.select('.domain').remove()});
+  g.append('g').call(d3.axisLeft(ys).ticks(6).tickSize(-w))
+    .call(a=>{a.selectAll('line').attr('stroke','rgba(255,255,255,0.03)');a.selectAll('text').attr('fill','#2A3A5A').attr('font-family','JetBrains Mono').attr('font-size','8px');a.select('.domain').remove()});
+
+  const gridG=g.append('g').attr('class','grid-bg');
+  const boundaryG=g.append('g');
+  const ptG=g.append('g');
+
+  // ── ML Algorithms ──
+  const sigmoid=z=>1/(1+Math.exp(-clamp(z,-20,20)));
+
+  function trainLogistic(X,y){
+    let wt=[0,0],b=0;
+    const lr=.15,epochs=600;
+    for(let e=0;e<epochs;e++){
+      let dw=[0,0],db=0;
+      for(let i=0;i<X.length;i++){const z=wt[0]*X[i][0]+wt[1]*X[i][1]+b;const p=sigmoid(z)-y[i];dw[0]+=p*X[i][0];dw[1]+=p*X[i][1];db+=p;}
+      wt[0]-=lr*dw[0]/X.length;wt[1]-=lr*dw[1]/X.length;b-=lr*db/X.length;
+    }
+    return pt=>(sigmoid(wt[0]*pt[0]+wt[1]*pt[1]+b)>.5?1:0);
+  }
+
+  function predictKNN(X,y,k,pt){
+    const d=X.map((x,i)=>({d:(x[0]-pt[0])**2+(x[1]-pt[1])**2,l:y[i]}));
+    d.sort((a,b)=>a.d-b.d);
+    const votes=d.slice(0,k).reduce((a,n)=>{a[n.l]=(a[n.l]||0)+1;return a;},{});
+    return +Object.keys(votes).reduce((a,b)=>votes[a]>votes[b]?a:b);
+  }
+
+  function trainNaiveBayes(X,y){
+    const stats={};
+    [0,1].forEach(c=>{
+      const pts=X.filter((_,i)=>y[i]===c);
+      const n=pts.length;
+      const mean=[0,1].map(f=>pts.reduce((s,p)=>s+p[f],0)/n);
+      const variance=[0,1].map(f=>pts.reduce((s,p)=>s+(p[f]-mean[f])**2,0)/n+1e-6);
+      stats[c]={mean,variance,logPrior:Math.log(n/X.length)};
+    });
+    return pt=>{
+      const logP=[0,1].map(c=>{
+        const{mean,variance,logPrior}=stats[c];
+        return logPrior+[0,1].reduce((s,f)=>s-.5*Math.log(2*Math.PI*variance[f])-(pt[f]-mean[f])**2/(2*variance[f]),0);
+      });
+      return logP[0]>logP[1]?0:1;
+    };
+  }
+
+  function genData(){
+    trainX=[];trainY=[];
+    [[-1.3,-.9],[.4,1.4]].forEach((c,cls)=>{
+      for(let i=0;i<30;i++){trainX.push([c[0]+randn()*1.2,c[1]+randn()*1.2]);trainY.push(cls);}
+    });
+    [[1.3,.9],[-.4,-1.4]].forEach((c)=>{
+      for(let i=0;i<30;i++){trainX.push([c[0]+randn()*1.2,c[1]+randn()*1.2]);trainY.push(1);}
+    });
+    // keep only class 0 from first two clusters
+    trainX=[];trainY=[];
+    for(let i=0;i<40;i++){trainX.push([-1.1+randn()*.9,.4+randn()*.9]);trainY.push(0);}
+    for(let i=0;i<40;i++){trainX.push([1.1+randn()*.9,-.4+randn()*.9]);trainY.push(1);}
+  }
+
+  function getPredictor(){
+    if(currentModel==='logistic')return trainLogistic(trainX,trainY);
+    if(currentModel==='knn')return pt=>predictKNN(trainX,trainY,kVal,pt);
+    return trainNaiveBayes(trainX,trainY);
+  }
+
+  function renderD1(){
+    const predict=getPredictor();
+    // grid
+    const cellW=w/GX,cellH=h/GY;
+    const gridData=[];
+    for(let i=0;i<GX;i++){for(let j=0;j<GY;j++){
+      const px=XMIN+(i+.5)*(XMAX-XMIN)/GX;
+      const py=YMIN+(j+.5)*(YMAX-YMIN)/GY;
+      gridData.push({i,j,cls:predict([px,py])});
+    }}
+    gridG.selectAll('rect').data(gridData).join('rect')
+      .attr('x',d=>d.i*cellW).attr('y',d=>d.j*cellH)
+      .attr('width',cellW+.5).attr('height',cellH+.5)
+      .attr('fill',d=>CLASS_COLORS_DIM[d.cls]);
+
+    // points
+    ptG.selectAll('circle').data(trainX).join('circle')
+      .attr('cx',d=>xs(d[0])).attr('cy',d=>ys(d[1])).attr('r',5)
+      .attr('fill',(_,i)=>CLASS_COLORS[trainY[i]])
+      .attr('stroke','rgba(0,0,0,.3)').attr('stroke-width',.8)
+      .attr('opacity',.85);
+
+    // accuracy
+    const correct=trainX.filter((x,i)=>predict(x)===trainY[i]).length;
+    const acc=(correct/trainX.length*100).toFixed(1);
+    document.getElementById('d1-acc').textContent=acc+'%';
+    document.getElementById('d1-model').textContent=currentModel==='logistic'?'Logistic':currentModel==='knn'?`KNN (k=${kVal})`:'Naive Bayes';
+    document.getElementById('d1-bound').textContent=currentModel==='logistic'?'Linear':currentModel==='knn'?'Piecewise':'Gaussian';
+    document.getElementById('d1-tag').textContent=currentModel==='logistic'?'Logistic Regression':currentModel==='knn'?`KNN — K=${kVal}`:'Naive Bayes';
+  }
+
+  // Init
+  genData();renderD1();
+
+  // Toggles
+  document.querySelectorAll('#d1-toggles .btn-toggle').forEach(btn=>{
+    btn.addEventListener('click',function(){
+      document.querySelectorAll('#d1-toggles .btn-toggle').forEach(b=>b.classList.remove('active'));
+      this.classList.add('active');
+      currentModel=this.dataset.model;
+      document.getElementById('k-group').style.display=currentModel==='knn'?'flex':'none';
+      renderD1();
+    });
+  });
+  document.getElementById('k-slider').addEventListener('input',function(){
+    kVal=parseInt(this.value);
+    document.getElementById('k-val').textContent=kVal;
+    if(currentModel==='knn')renderD1();
+  });
+  document.getElementById('d1-regen').addEventListener('click',()=>{genData();renderD1();});
+})();
+
+// ════════════════════════════════════════════
+//  DEMO 2 — Decision Tree → Random Forest
+// ════════════════════════════════════════════
+(()=>{
+  const VW=460,VH=340,m={t:15,r:15,b:15,l:15};
+  const w=VW-m.l-m.r,h=VH-m.t-m.b;
+  const XMIN=0,XMAX=1,YMIN=0,YMAX=1;
+  const xs=d3.scaleLinear().domain([XMIN,XMAX]).range([0,w]);
+  const ys=d3.scaleLinear().domain([YMIN,YMAX]).range([h,0]);
+  const GX=55,GY=46;
+  const BG=['rgba(251,191,36,0.14)','rgba(56,190,255,0.14)'];
+  const PC=['#FBBF24','#38BEFF'];
+
+  let trainX=[],trainY=[],dtMaxDepth=1,d2Mode='tree',rfTrees=[];
+
+  const svg=d3.select('#d2-host').append('svg').attr('viewBox',`0 0 ${VW} ${VH}`).style('width','100%');
+  const g=svg.append('g').attr('transform',`translate(${m.l},${m.t})`);
+  g.append('rect').attr('width',w).attr('height',h).attr('fill','none').attr('stroke','rgba(255,255,255,0.05)').attr('stroke-width',.5);
+  const bgG=g.append('g');
+  const splitG=g.append('g');
+  const ptG=g.append('g');
+
+  function gini(labels){
+    if(!labels.length)return 0;
+    const n=labels.length,p1=labels.filter(l=>l===1).length/n;
+    return 1-p1*p1-(1-p1)*(1-p1);
+  }
+
+  function findBestSplit(indices){
+    let best={gini:Infinity,feature:0,threshold:.5};
+    [0,1].forEach(f=>{
+      const vals=[...new Set(indices.map(i=>trainX[i][f]))].sort((a,b)=>a-b);
+      for(let k=0;k<vals.length-1;k++){
+        const t=(vals[k]+vals[k+1])/2;
+        const lI=indices.filter(i=>trainX[i][f]<=t);
+        const rI=indices.filter(i=>trainX[i][f]>t);
+        if(!lI.length||!rI.length)continue;
+        const lL=lI.map(i=>trainY[i]),rL=rI.map(i=>trainY[i]);
+        const g=(lI.length*gini(lL)+rI.length*gini(rL))/indices.length;
+        if(g<best.gini){best={gini:g,feature:f,threshold:t};}
+      }
+    });
+    return best;
+  }
+
+  function buildTree(indices,depth,maxDepth){
+    const labels=indices.map(i=>trainY[i]);
+    const g0=gini(labels);
+    const majority=labels.filter(l=>l===1).length>labels.length/2?1:0;
+    if(depth>=maxDepth||g0<.05||indices.length<4)return{leaf:true,cls:majority,indices};
+    const{gini:sg,feature:f,threshold:t}=findBestSplit(indices);
+    const lI=indices.filter(i=>trainX[i][f]<=t);
+    const rI=indices.filter(i=>trainX[i][f]>t);
+    if(!lI.length||!rI.length)return{leaf:true,cls:majority,indices};
+    return{leaf:false,feature:f,threshold:t,gini:sg,depth,
+      left:buildTree(lI,depth+1,maxDepth),
+      right:buildTree(rI,depth+1,maxDepth)};
+  }
+
+  function predictTree(tree,pt){
+    if(tree.leaf)return tree.cls;
+    return pt[tree.feature]<=tree.threshold?predictTree(tree.left,pt):predictTree(tree.right,pt);
+  }
+
+  function getLeafRegions(tree,xMin,xMax,yMin,yMax){
+    if(tree.leaf){
+      const n=tree.indices.length,n1=tree.indices.filter(i=>trainY[i]===1).length;
+      return[{xMin,xMax,yMin,yMax,cls:tree.cls,purity:Math.max(n1/n,(n-n1)/n)}];
+    }
+    const{feature:f,threshold:t}=tree;
+    if(f===0){
+      return[...getLeafRegions(tree.left,xMin,t,yMin,yMax),...getLeafRegions(tree.right,t,xMax,yMin,yMax)];
+    }else{
+      return[...getLeafRegions(tree.left,xMin,xMax,yMin,t),...getLeafRegions(tree.right,xMin,xMax,t,yMax)];
+    }
+  }
+
+  function getSplitLines(tree,xMin,xMax,yMin,yMax,lines=[]){
+    if(tree.leaf)return lines;
+    const{feature:f,threshold:t}=tree;
+    if(f===0){lines.push({x1:t,x2:t,y1:yMin,y2:yMax});getSplitLines(tree.left,xMin,t,yMin,yMax,lines);getSplitLines(tree.right,t,xMax,yMin,yMax,lines);}
+    else{lines.push({x1:xMin,x2:xMax,y1:t,y2:t});getSplitLines(tree.left,xMin,xMax,yMin,t,lines);getSplitLines(tree.right,xMin,xMax,t,yMax,lines);}
+    return lines;
+  }
+
+  function countLeaves(tree){if(tree.leaf)return 1;return countLeaves(tree.left)+countLeaves(tree.right);}
+
+  function buildForest(n=8){
+    return Array.from({length:n},()=>{
+      const bs=Array.from({length:trainX.length},()=>Math.floor(Math.random()*trainX.length));
+      const bsX=bs.map(i=>trainX[i]),bsY=bs.map(i=>trainY[i]);
+      const oldX=trainX,oldY=trainY;
+      trainX=bsX;trainY=bsY;
+      const t=buildTree(Array.from({length:bsX.length},(_,i)=>i),0,3);
+      trainX=oldX;trainY=oldY;
+      return t;
+    });
+  }
+
+  function renderD2(){
+    if(d2Mode==='tree'){
+      const allIdx=Array.from({length:trainX.length},(_,i)=>i);
+      const tree=buildTree(allIdx,0,dtMaxDepth);
+      const regions=getLeafRegions(tree,0,1,0,1);
+      const splits=getSplitLines(tree,0,1,0,1);
+
+      bgG.selectAll('rect').data(regions).join('rect')
+        .attr('x',d=>xs(d.xMin)).attr('y',d=>ys(d.yMax))
+        .attr('width',d=>xs(d.xMax)-xs(d.xMin)).attr('height',d=>ys(d.yMin)-ys(d.yMax))
+        .attr('fill',d=>d.cls===1?'rgba(56,190,255,0.14)':'rgba(251,191,36,0.14)');
+
+      splitG.selectAll('line').data(splits).join('line')
+        .attr('x1',d=>xs(d.x1)).attr('x2',d=>xs(d.x2)).attr('y1',d=>ys(d.y1)).attr('y2',d=>ys(d.y2))
+        .attr('stroke',d=>d.x1===d.x2?'rgba(251,191,36,0.6)':'rgba(56,190,255,0.6)').attr('stroke-width',1.5).attr('stroke-dasharray','5,3');
+
+      const leaves=countLeaves(tree);
+      const allGini=trainX.reduce((s,x,i)=>{const p=predictTree(tree,x);return s+(p===trainY[i]?0:1);},0);
+      document.getElementById('d2-depth').textContent=dtMaxDepth;
+      document.getElementById('d2-leaves').textContent=leaves;
+      document.getElementById('d2-gini').textContent=(1-allGini/trainX.length).toFixed(3);
+      document.getElementById('d2-mode').textContent='Tree';
+      document.getElementById('d2-tag').textContent=`Decision Tree — Depth ${dtMaxDepth}`;
+    } else {
+      // Random Forest
+      const GX2=45,GY2=38;
+      const gridData=[];
+      for(let i=0;i<GX2;i++){for(let j=0;j<GY2;j++){
+        const px=(i+.5)/GX2,py=(j+.5)/GY2;
+        const votes=rfTrees.reduce((s,t)=>s+predictTree(t,[px,py]),0);
+        gridData.push({i,j,cls:votes>rfTrees.length/2?1:0});
+      }}
+      const cW=w/GX2,cH=h/GY2;
+      bgG.selectAll('rect').data(gridData).join('rect')
+        .attr('x',d=>d.i*cW).attr('y',d=>d.j*cH).attr('width',cW+.5).attr('height',cH+.5)
+        .attr('fill',d=>d.cls===1?'rgba(56,190,255,0.16)':'rgba(251,191,36,0.16)');
+      splitG.selectAll('*').remove();
+      document.getElementById('d2-depth').textContent='3';
+      document.getElementById('d2-leaves').textContent=rfTrees.length+'×trees';
+      document.getElementById('d2-gini').textContent='ensemble';
+      document.getElementById('d2-mode').textContent='Forest';
+      document.getElementById('d2-tag').textContent=`Random Forest — ${rfTrees.length} trees`;
+    }
+
+    ptG.selectAll('circle').data(trainX).join('circle')
+      .attr('cx',d=>xs(d[0])).attr('cy',d=>ys(d[1])).attr('r',5)
+      .attr('fill',(_,i)=>PC[trainY[i]]).attr('opacity',.8).attr('stroke','rgba(0,0,0,.3)').attr('stroke-width',.7);
+  }
+
+  function initD2(){
+    trainX=[];trainY=[];
+    // 3 cluster structure
+    [[.25,.75],[.75,.25],[.5,.5]].forEach(([cx,cy],ci)=>{
+      const cls=ci<2?ci:Math.random()>.5?0:1;
+      for(let i=0;i<20;i++){trainX.push([clamp(cx+randn()*.15,0,1),clamp(cy+randn()*.15,0,1)]);trainY.push(ci===2?(i<10?0:1):ci);}
+    });
+    rfTrees=buildForest(8);
+    dtMaxDepth=1;
+    document.getElementById('d2-depth-slider').value=1;
+    document.getElementById('d2-depth-val').textContent=1;
+    renderD2();
+  }
+
+  document.getElementById('d2-depth-slider').addEventListener('input',function(){
+    dtMaxDepth=parseInt(this.value);
+    document.getElementById('d2-depth-val').textContent=dtMaxDepth;
+    if(d2Mode==='tree')renderD2();
+  });
+  document.getElementById('d2-step').addEventListener('click',()=>{
+    if(d2Mode==='tree'){dtMaxDepth=Math.min(dtMaxDepth+1,5);document.getElementById('d2-depth-slider').value=dtMaxDepth;document.getElementById('d2-depth-val').textContent=dtMaxDepth;renderD2();}
+  });
+  document.getElementById('d2-reset').addEventListener('click',initD2);
+  document.getElementById('d2-tree-btn').addEventListener('click',function(){
+    d2Mode='tree';this.classList.add('active');document.getElementById('d2-rf-btn').classList.remove('active');
+    document.getElementById('d2-tree-ctrls').style.display='flex';
+    document.getElementById('d2-step').textContent='+ Grow one level';
+    renderD2();
+  });
+  document.getElementById('d2-rf-btn').addEventListener('click',function(){
+    d2Mode='forest';this.classList.add('active');document.getElementById('d2-tree-btn').classList.remove('active');
+    rfTrees=buildForest(8);
+    document.getElementById('d2-step').textContent='↺ New forest';
+    renderD2();
+  });
+  document.getElementById('d2-step').addEventListener('click',()=>{
+    if(d2Mode==='forest'){rfTrees=buildForest(8);renderD2();}
+  });
+  initD2();
+})();
+
+// ════════════════════════════════════════════
+//  DEMO 3 — SVM: The Margin
+// ════════════════════════════════════════════
+(()=>{
+  const VW=460,VH=330,m={t:15,r:15,b:15,l:15};
+  const w=VW-m.l-m.r,h=VH-m.t-m.b;
+  const xs=d3.scaleLinear().domain([-1,1]).range([0,w]);
+  const ys=d3.scaleLinear().domain([-1,1]).range([h,0]);
+  const GX=50,GY=42;
+
+  let d3Mode='linear',svmC=1.0,trainX=[],trainY=[];
+
+  const svg=d3.select('#d3-host').append('svg').attr('viewBox',`0 0 ${VW} ${VH}`).style('width','100%');
+  const g=svg.append('g').attr('transform',`translate(${m.l},${m.t})`);
+  g.append('rect').attr('width',w).attr('height',h).attr('fill','none').attr('stroke','rgba(255,255,255,0.05)').attr('stroke-width',.5);
+
+  const defs=svg.append('defs');
+  const glow=defs.append('filter').attr('id','svGlow');
+  glow.append('feGaussianBlur').attr('stdDeviation','3').attr('result','blur');
+  const fm=glow.append('feMerge');fm.append('feMergeNode').attr('in','blur');fm.append('feMergeNode').attr('in','SourceGraphic');
+
+  const bgG=g.append('g');
+  const marginG=g.append('g');
+  const ptG=g.append('g');
+  const svG=g.append('g');
+
+  function genLinearData(){
+    trainX=[];trainY=[];
+    for(let i=0;i<35;i++){trainX.push([-.25+randn()*.3,randn()*.3]);trainY.push(-1);}
+    for(let i=0;i<35;i++){trainX.push([.25+randn()*.3,randn()*.3]);trainY.push(1);}
+  }
+
+  function genRBFData(){
+    trainX=[];trainY=[];
+    for(let i=0;i<35;i++){const a=Math.random()*Math.PI*2,r=.22+Math.random()*.1;trainX.push([r*Math.cos(a),r*Math.sin(a)]);trainY.push(1);}
+    for(let i=0;i<35;i++){const a=Math.random()*Math.PI*2,r=.52+Math.random()*.15;trainX.push([r*Math.cos(a),r*Math.sin(a)]);trainY.push(-1);}
+  }
+
+  function trainLinearSVM(X,y,C,epochs=1200){
+    let wt=[.1,.1],b=0;
+    const lr0=.02;
+    for(let e=0;e<epochs;e++){
+      const lr=lr0/(1+e*.002);
+      const idx=Array.from({length:X.length},(_,i)=>i).sort(()=>Math.random()-.5);
+      for(const i of idx){
+        const yi=y[i],dec=yi*(wt[0]*X[i][0]+wt[1]*X[i][1]+b);
+        if(dec<1){wt[0]-=lr*(wt[0]-C*yi*X[i][0]);wt[1]-=lr*(wt[1]-C*yi*X[i][1]);b+=lr*C*yi;}
+        else{wt[0]*=(1-lr);wt[1]*=(1-lr);}
+      }
+    }
+    return{w:wt,b};
+  }
+
+  function predictLinear(model,pt){return model.w[0]*pt[0]+model.w[1]*pt[1]+model.b;}
+  function predictRBF(X,y,pt,gamma=18){return X.reduce((s,x,i)=>s+y[i]*Math.exp(-gamma*((x[0]-pt[0])**2+(x[1]-pt[1])**2)),0);}
+
+  function renderD3(){
+    const cW=w/GX,cH=h/GY;
+    bgG.selectAll('*').remove();marginG.selectAll('*').remove();ptG.selectAll('*').remove();svG.selectAll('*').remove();
+
+    let predict,svIndices=[];
+
+    if(d3Mode==='linear'){
+      const model=trainLinearSVM(trainX,trainY,svmC);
+      predict=pt=>predictLinear(model,pt);
+      // find support vectors
+      const norm=Math.sqrt(model.w[0]**2+model.w[1]**2);
+      svIndices=trainX.map((_,i)=>i).filter(i=>{
+        const d=Math.abs(trainY[i]*(model.w[0]*trainX[i][0]+model.w[1]*trainX[i][1]+model.b));
+        return d<=1.3;
+      });
+      // draw margin band
+      const drawLine=(offset,color,dash)=>{
+        const{w:wt,b}=model;
+        if(Math.abs(wt[1])<1e-8)return;
+        const x1=-1,y1=(-wt[0]*x1-b+offset)/wt[1];
+        const x2=1,y2=(-wt[0]*x2-b+offset)/wt[1];
+        marginG.append('line').attr('x1',xs(x1)).attr('x2',xs(x2)).attr('y1',ys(y1)).attr('y2',ys(y2))
+          .attr('stroke',color).attr('stroke-width',dash?1.2:2.5).attr('stroke-dasharray',dash||'none').attr('opacity',.9);
+      };
+      drawLine(0,'#FB7185');
+      drawLine(1,'rgba(251,129,133,0.4)','5,4');
+      drawLine(-1,'rgba(251,129,133,0.4)','5,4');
+    } else {
+      predict=pt=>predictRBF(trainX,trainY,pt);
+      svIndices=[];
+    }
+
+    // background grid
+    const gridData=[];
+    for(let i=0;i<GX;i++){for(let j=0;j<GY;j++){
+      const px=-1+(i+.5)*2/GX,py=-1+(j+.5)*2/GY;
+      const v=predict([px,py]);
+      gridData.push({i,j,v});
+    }}
+    bgG.selectAll('rect').data(gridData).join('rect')
+      .attr('x',d=>d.i*cW).attr('y',d=>d.j*cH).attr('width',cW+.5).attr('height',cH+.5)
+      .attr('fill',d=>d.v>0?'rgba(56,190,255,0.15)':'rgba(255,122,61,0.15)');
+
+    // points
+    ptG.selectAll('circle').data(trainX).join('circle')
+      .attr('cx',d=>xs(d[0])).attr('cy',d=>ys(d[1])).attr('r',5)
+      .attr('fill',(_,i)=>trainY[i]===1?'#38BEFF':'#FF7A3D')
+      .attr('opacity',.8).attr('stroke','rgba(0,0,0,.3)').attr('stroke-width',.7);
+
+    // support vectors highlight
+    if(d3Mode==='linear'){
+      svIndices.forEach(i=>{
+        svG.append('circle').attr('cx',xs(trainX[i][0])).attr('cy',ys(trainX[i][1])).attr('r',10)
+          .attr('fill','none').attr('stroke','#FB7185').attr('stroke-width',1.8).attr('opacity',.8).attr('filter','url(#svGlow)');
+      });
+    }
+
+    document.getElementById('d3-kernel').textContent=d3Mode==='linear'?'Linear':'RBF';
+    document.getElementById('d3-sv').textContent=d3Mode==='linear'?svIndices.length:'kernel';
+    document.getElementById('d3-c-val').textContent=svmC.toFixed(1);
+    document.getElementById('d3-tag').textContent=d3Mode==='linear'?`SVM — Linear, C=${svmC.toFixed(1)}`:'SVM — RBF Kernel';
+  }
+
+  function initD3(){
+    if(d3Mode==='linear')genLinearData();
+    else genRBFData();
+    renderD3();
+  }
+
+  document.getElementById('d3-lin-btn').addEventListener('click',function(){
+    d3Mode='linear';this.classList.add('active');document.getElementById('d3-rbf-btn').classList.remove('active');
+    document.getElementById('d3-c-group').style.display='flex';
+    genLinearData();renderD3();
+  });
+  document.getElementById('d3-rbf-btn').addEventListener('click',function(){
+    d3Mode='rbf';this.classList.add('active');document.getElementById('d3-lin-btn').classList.remove('active');
+    document.getElementById('d3-c-group').style.display='none';
+    genRBFData();renderD3();
+  });
+  document.getElementById('d3-c-slider').addEventListener('input',function(){
+    svmC=this.value/10;
+    document.getElementById('d3-c-disp').textContent=svmC.toFixed(1);
+    if(d3Mode==='linear')renderD3();
+  });
+  document.getElementById('d3-regen').addEventListener('click',initD3);
+
+  initD3();
+})();
+
+// ════════════════════════════════════════════
+//  DEMO 0 — Sigmoid: From a Line to a Probability
+// ════════════════════════════════════════════
+(()=>{
+  const VW=460,VH=310,m={t:20,r:20,b:36,l:48};
+  const w=VW-m.l-m.r,h=VH-m.t-m.b;
+  const ZMIN=-6,ZMAX=6;
+  const xs=d3.scaleLinear().domain([ZMIN,ZMAX]).range([0,w]);
+  const ys=d3.scaleLinear().domain([-0.08,1.08]).range([h,0]);
+
+  const sigmoid=z=>1/(1+Math.exp(-z));
+
+  const svg=d3.select('#d0-host').append('svg')
+    .attr('viewBox',`0 0 ${VW} ${VH}`).style('width','100%');
+  const g=svg.append('g').attr('transform',`translate(${m.l},${m.t})`);
+
+  // Grid
+  g.append('g').attr('transform',`translate(0,${h})`).call(d3.axisBottom(xs).ticks(7).tickSize(-h))
+    .call(a=>{a.selectAll('line').attr('stroke','rgba(255,255,255,0.04)');a.selectAll('text').attr('fill','#2A3A5A').attr('font-family','JetBrains Mono').attr('font-size','8px');a.select('.domain').remove()});
+  g.append('g').call(d3.axisLeft(ys).tickValues([0,.25,.5,.75,1]).tickSize(-w))
+    .call(a=>{a.selectAll('line').attr('stroke','rgba(255,255,255,0.04)');a.selectAll('text').attr('fill','#2A3A5A').attr('font-family','JetBrains Mono').attr('font-size','8px');a.select('.domain').remove()});
+
+  // Sigmoid curve
+  const line=d3.line().x(d=>xs(d[0])).y(d=>ys(d[1])).curve(d3.curveCatmullRom);
+  const curveData=d3.range(ZMIN,ZMAX+.05,.05).map(z=>[z,sigmoid(z)]);
+  g.append('path').datum(curveData).attr('fill','none').attr('stroke','#00F5D4').attr('stroke-width',2.8).attr('d',line);
+
+  // Threshold line (dynamic)
+  const threshLine=g.append('line').attr('x1',0).attr('x2',w).attr('stroke','rgba(255,122,61,0.5)').attr('stroke-width',1).attr('stroke-dasharray','5,4');
+  const threshLabel=g.append('text').attr('x',w-2).attr('text-anchor','end').attr('font-family','JetBrains Mono').attr('font-size','8px').attr('fill','rgba(255,122,61,0.7)');
+
+  // Shaded zones
+  const zone0=g.append('rect').attr('x',0).attr('y',0).attr('width',w).attr('fill','rgba(255,122,61,0.06)');
+  const zone1=g.append('rect').attr('x',0).attr('y',0).attr('width',w).attr('fill','rgba(56,190,255,0.06)');
+
+  // Vertical line at z
+  const vLine=g.append('line').attr('y1',0).attr('y2',h).attr('stroke','rgba(255,255,255,0.2)').attr('stroke-width',1).attr('stroke-dasharray','3,3');
+
+  // Dot on curve
+  const dot=g.append('circle').attr('r',7).attr('fill','#00F5D4').attr('stroke','white').attr('stroke-width',1.5);
+
+  // Horizontal dotted line to y-axis
+  const hLine=g.append('line').attr('stroke','rgba(0,245,212,0.3)').attr('stroke-width',1).attr('stroke-dasharray','3,3');
+
+  let thresh=0.5;
+
+  function renderD0(zRaw){
+    const z=zRaw/10;
+    const sig=sigmoid(z);
+    const cx=xs(z),cy=ys(sig);
+    const ty=ys(thresh);
+
+    threshLine.attr('y1',ty).attr('y2',ty);
+    threshLabel.attr('y',ty-4).text(`threshold = ${thresh.toFixed(2)}`);
+
+    zone0.attr('y',ty).attr('height',h-ty);
+    zone1.attr('height',ty);
+
+    vLine.attr('x1',cx).attr('x2',cx);
+    dot.attr('cx',cx).attr('cy',cy);
+    hLine.attr('x1',0).attr('x2',cx).attr('y1',cy).attr('y2',cy);
+
+    document.getElementById('d0-z').textContent=z.toFixed(2);
+    document.getElementById('d0-sig').textContent=sig.toFixed(3);
+    document.getElementById('d0-z-label').textContent=z.toFixed(1);
+
+    const dec=sig>=thresh;
+    const decEl=document.getElementById('d0-dec');
+    if(Math.abs(sig-thresh)<0.03){decEl.textContent='Uncertain';decEl.style.color='var(--muted)';}
+    else if(dec){decEl.textContent='Class 1';decEl.style.color='var(--blue)';}
+    else{decEl.textContent='Class 0';decEl.style.color='var(--orange)';}
+  }
+
+  document.getElementById('d0-slider').addEventListener('input',function(){
+    renderD0(parseInt(this.value));
+  });
+  document.getElementById('d0-thresh').addEventListener('input',function(){
+    thresh=this.value/100;
+    document.getElementById('d0-thresh-label').textContent=thresh.toFixed(2);
+    renderD0(parseInt(document.getElementById('d0-slider').value));
+  });
+  renderD0(0);
+})();
+
+// ════════════════════════════════════════════
+//  DEMO 1b — Naive Bayes: Why the Gaussians
+// ════════════════════════════════════════════
+let _dnbFeature=1;
+let _dnbStats={};
+
+function dnbGauss(x,mu,sigma){
+  return Math.exp(-0.5*((x-mu)/sigma)**2)/(sigma*Math.sqrt(2*Math.PI));
+}
+
+function dnbBuildStats(data){
+  const res={};
+  [0,1].forEach(cls=>{
+    [0,1].forEach(f=>{
+      const vals=data.filter(d=>d.cls===cls).map(d=>d.x[f]);
+      const n=vals.length;
+      const mu=vals.reduce((s,v)=>s+v,0)/n;
+      const sigma=Math.sqrt(vals.reduce((s,v)=>s+(v-mu)**2,0)/n)+0.2;
+      if(!res[cls])res[cls]={};
+      res[cls][f]={mu,sigma,prior:n/data.length};
+    });
+  });
+  return res;
+}
+
+(()=>{
+  const VW=460,VH=290,m={t:20,r:20,b:36,l:48};
+  const w=VW-m.l-m.r,h=VH-m.t-m.b;
+
+  let data=[],xMin=-4,xMax=4;
+
+  function genNBData(){
+    data=[];
+    // Class 0: centered around -1
+    for(let i=0;i<40;i++) data.push({cls:0,x:[-1+randn()*.9,-0.5+randn()*.7]});
+    // Class 1: centered around +1.5
+    for(let i=0;i<40;i++) data.push({cls:1,x:[1.5+randn()*.85,1.0+randn()*.8]});
+    _dnbStats=dnbBuildStats(data);
+  }
+
+  const xs=()=>d3.scaleLinear().domain([xMin,xMax]).range([0,w]);
+  const ys=d3.scaleLinear().domain([0,0.65]).range([h,0]);
+
+  const svg=d3.select('#dnb-host').append('svg')
+    .attr('viewBox',`0 0 ${VW} ${VH}`).style('width','100%');
+  const g=svg.append('g').attr('transform',`translate(${m.l},${m.t})`);
+
+  g.append('g').attr('transform',`translate(0,${h})`).call(d3.axisBottom(xs()).ticks(7).tickSize(-h))
+    .call(a=>{a.selectAll('line').attr('stroke','rgba(255,255,255,0.04)');a.selectAll('text').attr('fill','#2A3A5A').attr('font-family','JetBrains Mono').attr('font-size','8px');a.select('.domain').remove()});
+  g.append('g').call(d3.axisLeft(ys).ticks(4).tickSize(-w))
+    .call(a=>{a.selectAll('line').attr('stroke','rgba(255,255,255,0.04)');a.selectAll('text').attr('fill','#2A3A5A').attr('font-family','JetBrains Mono').attr('font-size','8px');a.select('.domain').remove()});
+
+  const curve0=g.append('path').attr('fill','rgba(56,190,255,0.12)').attr('stroke','#38BEFF').attr('stroke-width',2.2);
+  const curve1=g.append('path').attr('fill','rgba(255,122,61,0.12)').attr('stroke','#FF7A3D').attr('stroke-width',2.2);
+
+  // overlap shading
+  const overlapG=g.append('g');
+  const vLine=g.append('line').attr('y1',0).attr('y2',h).attr('stroke','rgba(255,255,255,0.3)').attr('stroke-width',1.5).attr('stroke-dasharray','4,3');
+  const dot0=g.append('circle').attr('r',6).attr('fill','#38BEFF').attr('opacity',0.9);
+  const dot1=g.append('circle').attr('r',6).attr('fill','#FF7A3D').attr('opacity',0.9);
+
+  const line=d3.line().x(d=>xs()(d[0])).y(d=>ys(d[1])).curve(d3.curveCatmullRom);
+  const area=d3.area().x(d=>xs()(d[0])).y0(h).y1(d=>ys(d[1])).curve(d3.curveCatmullRom);
+
+  function renderNB(xval){
+    const f=_dnbFeature-1;
+    const s0=_dnbStats[0][f];
+    const s1=_dnbStats[1][f];
+
+    const range=d3.range(xMin,xMax+.04,.04);
+    const d0=range.map(x=>[x,dnbGauss(x,s0.mu,s0.sigma)*s0.prior]);
+    const d1=range.map(x=>[x,dnbGauss(x,s1.mu,s1.sigma)*s1.prior]);
+
+    curve0.datum(d0).attr('d',area);
+    curve1.datum(d1).attr('d',area);
+
+    const cx=xs()(xval);
+    const p0=dnbGauss(xval,s0.mu,s0.sigma)*s0.prior;
+    const p1=dnbGauss(xval,s1.mu,s1.sigma)*s1.prior;
+
+    vLine.attr('x1',cx).attr('x2',cx);
+    dot0.attr('cx',cx).attr('cy',ys(p0));
+    dot1.attr('cx',cx).attr('cy',ys(p1));
+
+    const total=p0+p1||1e-9;
+    const pct0=p0/total,pct1=p1/total;
+
+    document.getElementById('dnb-x').textContent=xval.toFixed(2);
+    document.getElementById('dnb-p0').textContent=(pct0*100).toFixed(1)+'%';
+    document.getElementById('dnb-p1').textContent=(pct1*100).toFixed(1)+'%';
+    document.getElementById('dnb-bar0').style.width=(pct0*100)+'%';
+    document.getElementById('dnb-bar1').style.width=(pct1*100)+'%';
+    document.getElementById('dnb-bar0-pct').textContent=(pct0*100).toFixed(1)+'%';
+    document.getElementById('dnb-bar1-pct').textContent=(pct1*100).toFixed(1)+'%';
+
+    const pred=pct0>pct1?0:1;
+    const predEl=document.getElementById('dnb-pred');
+    predEl.textContent=`Class ${pred}`;
+    predEl.style.color=pred===0?'var(--blue)':'var(--orange)';
+    document.getElementById('dnb-tag').textContent=`Gaussian Likelihood — Feature ${_dnbFeature}`;
+  }
+
+  window.dnbSwitchFeature=function(f){
+    _dnbFeature=f;
+    document.getElementById('dnb-f1-btn').classList.toggle('active',f===1);
+    document.getElementById('dnb-f2-btn').classList.toggle('active',f===2);
+    renderNB(parseFloat(document.getElementById('dnb-slider').value)/10);
+  };
+  window.dnbRegen=function(){
+    genNBData();
+    renderNB(parseFloat(document.getElementById('dnb-slider').value)/10);
+  };
+
+  document.getElementById('dnb-slider').addEventListener('input',function(){
+    const v=parseInt(this.value)/10;
+    document.getElementById('dnb-slider-label').textContent=v.toFixed(1);
+    renderNB(v);
+  });
+
+  genNBData();
+  renderNB(0);
+})();
+</script>
+</body>
+</html>
